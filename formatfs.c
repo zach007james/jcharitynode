@@ -20,7 +20,7 @@ int main()
     
     if(!good_init)
     {
-        current_error = FS_IO_ERROR; fs_print_error(); 
+        fserror = FS_IO_ERROR; fs_print_error(); 
         printf("\n[DBG] failed initialization of software disk!!\n");
         return NULL;
     }
@@ -52,6 +52,10 @@ int main()
     // INIT INODE_BLOCKS // 
 
     // INIT INODE_BLOCKS // 
+
+    // INIT DIRECTORY_BLOCK //
+
+    // INIT DIRECTORY_BLOCK // 
 
     // No Need to Init Data Blocks - Init as We Go
 

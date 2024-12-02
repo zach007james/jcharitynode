@@ -15,18 +15,18 @@ Shared platform (Github - private repo)
 // INCLUDES //
 
 // UNDER THE HOOD SETUP //
-FSError current_error = FS_NONE; // used in fs_print_error()
+FSError fserror = FS_NONE; // used in fs_print_error()
 
 // 8 bits to a byte, so the NUM_BLOCKS / 8 is how many bytes I need, which is 1k... 
 unsigned char bitmap[NUM_BLOCKS / SOFTWARE_DISK_BLOCK_SIZE]; // == SOFTWARE_DISK_BLOCK_SIZE
 
 // are these the right types 
 const uint16_t MAX_NUM_DIRECT_INODE_BLOCKS = 13;
-
 #define NUM_INODE_BLOCKS 32 // TODO: arbitrary - needs to change later
 #define MAX_FILE_NAME_CHARACTERS  257 // min 256
 #define MAX_FILES 800
 #define INODES_PER_INODE_BLOCK SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)
+#define MAX_DIR_ENTRIES_PER_BLOCK MAX_FILES // need more math here
 
 const uint64_t MAX_NUM_INODES; 
 
@@ -54,7 +54,23 @@ typedef struct Inode
 {
     uint32_t size; // assuming this is the size of the file data in bytes
     uint16_t b[MAX_NUM_DIRECT_INODE_BLOCKS + 1];
+    //FileInternals *file_internals; // bc this isn't possible, need Directory struct
 } Inode;
+
+
+// implemenation needs to be adjusted and create file and find file 
+// need to be updated to use indices and not pointers
+typedef struct Directory
+{
+    char file_name[MAX_FILE_NAME_CHARACTERS];
+    uint32_t inode_index;
+} Directory;
+
+typedef struct DirectoryBlock
+{
+    Directory entries[MAX_DIR_ENTRIES_PER_BLOCK];
+    
+} DirectoryBlock;
 
 // blocks to hold the creation of hte files 
 typedef struct InodeBlock
@@ -66,7 +82,7 @@ typedef struct InodeBlock
 typedef struct FileInternals 
 {
     char file_name[MAX_FILE_NAME_CHARACTERS];
-    Inode *inode; // only one inode per file 
+    uint32_t inode_index; // only one inode per file 
     uint32_t file_size; // 
     bool is_open;
 } FileInternals;
@@ -204,7 +220,7 @@ File create_file(char *name)
     // if no inode found / search failed
     if(!free_inode)
     {
-        current_error = FS_OUT_OF_SPACE; fs_print_error();
+        fserror = FS_OUT_OF_SPACE; fs_print_error();
         free(ret_file); printf("\n[DBG] no more inodes left\n"); 
         return NULL;
     }
@@ -252,13 +268,40 @@ bool delete_file(char *name);
 
 // determines if a file with 'name' exists and returns true if it
 // exists, otherwise false.  Always sets 'fserror' global.
-bool file_exists(char *name);
+bool file_exists(char *name)
+{
+    // check filename
+    if(name == NULL || name[0] == '\0')
+    { fserror = FS_ILLEGAL_FILENAME; return false; }
+
+    // seach through inode blocks
+    for(int i = 0; i < NUM_INODE_BLOCKS; i++)
+    {
+        InodeBlock inode_block_buff;
+
+        // read in while tesing 
+        if(!(read_sd_block(&inode_block_buff, i + INODE_BLOCK_SD_START_LOCATION)))
+        {
+            fserror = FS_IO_ERROR;
+            printf("\n[DBG] Could not read a block while searching\n");
+            return false;
+        } 
+
+        for(int j = 0; j < INODES_PER_INODE_BLOCK; j++)
+        {
+            if(strcmp(inode_block_buff.inodes[j].file_internals->file_name, name) == 0)
+            { fserror = FS_NONE; fs_print_error(); true; }
+        }
+    }
+
+    fserror = FS_FILE_NOT_FOUND; fs_print_error(); return false; 
+}
 
 // describe current filesystem error code by printing a descriptive
 // message (qualifies - exactly as descriptive as the instructions gave )) to standard error.
 void fs_print_error(void) 
 { // fs_print_error // 
-    switch(current_error)
+    switch(fserror)
     { // s // 
         case FS_NONE:
         { printf("Great job, no error!"); break; }
@@ -291,37 +334,3 @@ bool check_structure_alignment(void);
 // filesystem error code set (set by each filesystem function)
 extern FSError fserror;
 // IMPLEMENTING GLDN's .h TEMPLATE // 
-
-
-
-// Zach's Brainstorming
-// NOV29
-// high-level layout:
-// tons of space
-// each of that space is given a per-inode setup 
-// indoes have inode blocks 
-// files are given sizes, and like the assignment 2, every
-// time a write tries to go through, a 'calculate_size()' needs
-// to be called and then ran - if over max file sisze, error
-// if not, then it needs to calculate the amount of virtual memory
-// (inodes / & inodeblocks) needed and then allocate or add (if editing)
-
-// instead of mallocing a gian piece of memory, I will malloc as I need,
-// for actual memory, and keep the pointer locations connected to the
-// corresponding virtual memory.  This is messy, but will work.  I prefer
-// dynamic memory allocation 
-
-// in attempt to make this thread safe, I will only allow one write 
-// to be occuring on a file a time (multiple file writes are allowed at once,
-// but not on the same file).  I will allow multiple read only parts, meaning
-// I need to write the open_file twice for both modes 
-
-// NOTES FROM GLDN class explanation // 
-// how memory is supposed to look:
-// [real bitmap][virtual bitmap][inodes][directory entries][data]
-
-// DEC1
-
-// While the head idea is on track for directories, I really need an giant 
-// array just to store all the inodes.  I will have a max amount of inodes,
-// with a certain amount of inode blocks.  The inode blocks will be stored
