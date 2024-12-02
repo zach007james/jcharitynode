@@ -5,20 +5,12 @@ filesystem before anything else happens
 
 // INCLUDES //
 #include "filesystem.h"
+// comment out below, just for current errors here right now
+#include "filesystem.c"
 #include "softwaredisk.h"
 #include <stdint.h> // for uint types
 #include <math.h> // for the ceil()
 // INCLUDES //
-
-
-#define MAX_FILE_NAME_CHARACTERS 25
-
-typedef struct FileInternals 
-{
-    char file_name[MAX_FILE_NAME_CHARACTERS];
-    void *first_inode;
-} FileInternals;
-
 
 int main()
 { // main // 
@@ -26,13 +18,13 @@ int main()
     // Init disk
     bool good_init = init_software_disk();
     uint16_t DISK_SIZE = software_disk_size();
+
     uint64_t DISK_BYTES_TOTAL = (uint64_t) DISK_SIZE * (uint64_t) SOFTWARE_DISK_BLOCK_SIZE;
     printf("SDBS: %d\nDS: %hu\nTBS: %u", SOFTWARE_DISK_BLOCK_SIZE, DISK_SIZE, DISK_BYTES_TOTAL);
     printf("The size of the software disk (in disk blocks) is: %hu\nThe total bytes size, times the block size, is %u\n", DISK_SIZE, DISK_BYTES_TOTAL);
 
     // Init the filesystem overhead structure
 
-    uint16_t MAX_FILES = 800;
     uint64_t FILE_INTER_SIZE = sizeof(FileInternals);
     uint64_t MAX_REQUIRED_MAP_SPACE = MAX_FILES * FILE_INTER_SIZE;
 

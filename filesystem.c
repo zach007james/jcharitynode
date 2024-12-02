@@ -17,10 +17,13 @@ FSError current_error = FS_NONE; // used in fs_print_error()
 
 
 // are these the right types 
-const uint16_t NUM_DIRECT_INODE_BLOCKS = 1;
+const uint16_t MAX_NUM_DIRECT_INODE_BLOCKS = 13;
 const uint32_t SOFTWARE_DISK_BLOCK_SIZE = 1;
 
+#define NUM_INODE_BLOCKS 32 // TODO: arbitrary - needs to change later
 #define MAX_FILE_NAME_CHARACTERS  257 // min 256
+#define MAX_FILES 800
+#define INODES_PER_INODE_BLOCK SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)
 
 const uint64_t MAX_NUM_INODES; 
 
@@ -33,8 +36,13 @@ const uint64_t MAX_NUM_INODES;
 // OVERALL SD: [bitmap][inode blocks][data]
 
 // [bitmap]: SDB0 (1 for used, 0 for free (managing the data array and inodeblocks - to see if they have been allocated yet or not))
-// [inode block]: b[0-12] (direct blocks pointing directly to 1-13 SD data blocks)
+// [inode block]: b[0-12] (direct inode blocks pointing directly to 1-13 SD data blocks)
 //                b[13] (indirect block: ? )
+#define BITMAP_SD_LOCATION 0
+#define INODE_BLOCK_SD_START_LOCATION 1
+//  inode: one per file 
+
+// FineInternals : 
 
 
 // Coppied Structs from GLDN in class
@@ -42,23 +50,25 @@ const uint64_t MAX_NUM_INODES;
 typedef struct Inode 
 {
     uint32_t size;
-    uint16_t b[NUM_DIRECT_INODE_BLOCKS + 1];
+    uint16_t b[MAX_NUM_DIRECT_INODE_BLOCKS + 1];
 } Inode;
 
 // blocks to hold the creation of hte files 
 typedef struct InodeBlock
 {
-    Inode indoes[SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)];
-} InodeBLock;
+    Inode inodes[INODES_PER_INODE_BLOCK];
+} InodeBlock;
 // Coppied Structs from GLDN in class
 
 typedef struct FileInternals 
 {
     char file_name[MAX_FILE_NAME_CHARACTERS];
     Inode *inode; // only one inode per file 
+    uint32_t file_size; // 
+    bool is_open;
 } FileInternals;
 
-
+// GLDN CLASS NOTES COPIED // 
 //bool check_structure_alignment(void)
 //{
     //printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
@@ -102,7 +112,7 @@ typedef struct FileInternals
         //}
     //}
 //}
-
+// GLDN CLASS NOTES COPIED // 
 
 
 // IMPLEMENTING GLDN's .h TEMPLATE //
@@ -126,7 +136,82 @@ File open_file(char *name, FileMode mode)
 // create and open new file with pathname 'name' and (implied) access
 // mode READ_WRITE.  Current file position is set to byte 0.  Returns
 // NULL on error. Always sets 'fserror' global.
-File create_file(char *name);
+File create_file(char *name)
+{
+    // threadsafe call here??
+
+    File ret_file; // init file
+    ret_file = malloc(sizeof(struct FileInternals)); // malloc local RAM / program storage for this
+    if(!ret_file) { printf("[DBG] malloc failed"); return NULL; }
+
+    ret_file->file_size = 0; // init size to 0
+    
+    strncpy(ret_file->file_name, name, sizeof(ret_file->file_name) - 1); // setting the file name
+    ret_file->file_name[sizeof(ret_file->file_name) - 1] = '\0'; // null termination
+
+    // search bitmap of inode locations / or research manually through to find next available inode in inode block
+    // TODO: do I need an inode block bitmap for each inode block
+
+    Inode* free_inode = NULL;
+    int inode_block_index_buff = -1;
+
+    // need a num of inode blocks method
+
+    for(int i = 0; i < NUM_INODE_BLOCKS; i++)
+    {
+        InodeBlock inode_block_buff;
+
+        // reads in the content to the block buffer and tests 
+        if(!(read_sd_block(&inode_block_buff, i + INODE_BLOCK_SD_START_LOCATION)))
+        {
+            printf("\n[DBG] could read in inode block to read it for looking for open inodes for the new file.\n");
+        }
+
+        // search the InodeBlock for an open Inode for the file to have
+        for(int j = 0; j < (SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)); j++)
+        {
+            // needs refining, but the idea is to see if the inode here fixes itself
+            if((inode_block_buff.inodes[j].size == 0) && (inode_block_buff.inodes[j].b[0] != NULL))
+            {
+                free_inode = &inode_block_buff.inodes[j];
+                inode_block_index_buff = i;
+                break;
+            }
+
+            if(free_inode)
+            {
+                free_inode->size = 0;
+                // clear the block pointers... ???
+                memset(free_inode->b, 0, sizeof(free_inode->b));
+
+                // update the disk 
+                if(!write_sd_block(&inode_block_buff, inode_block_index_buff + INODE_BLOCK_SD_START_LOCATION))
+                {
+                    printf("[DBG] error writing block to disk");
+                    free(ret_file);
+                    return NULL;
+                }
+                break;
+            }
+        }        
+    }
+
+    // if no inode found / search failed
+    if(!free_inode)
+    {
+        current_error = FS_OUT_OF_SPACE; fs_print_error();
+        free(ret_file); printf("\n[DBG] no more inodes left\n"); 
+        return NULL;
+    }
+    
+
+    // finally set the ret file to the new inode
+    ret_file->inode = free_inode;
+    ret_file->is_open = false; // should this be true??
+
+    return ret_file;
+    // threadsafe call here??
+}
 
 // close 'file'.  Always sets 'fserror' global.
 void close_file(File file);
