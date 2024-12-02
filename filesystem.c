@@ -16,30 +16,31 @@ Shared platform (Github - private repo)
 FSError current_error = FS_NONE; // used in fs_print_error()
 
 
-
-
 // are these the right types 
 const uint16_t NUM_DIRECT_INODE_BLOCKS = 1;
 const uint32_t SOFTWARE_DISK_BLOCK_SIZE = 1;
-const uint32_t FIRST_DATA_BLOCK; // 
 
-
-const uint16_t MAX_FILE_NAME_CHARACTERS = 25;
-
-// NOTES FROM GLDN class explanation // 
-
-typedef enum { FILE, DIR } Type; // can treat everything as a folder or dir 
+#define MAX_FILE_NAME_CHARACTERS  257 // min 256
 
 const uint64_t MAX_NUM_INODES; 
 
 
+// HIGH-LEVEL EXPLANATION
+// software disk block (SDB): 1k bytes
+// software disk (SD): [SDB 0][SDB 1]...[SDB 8k]
+// using softwaredisk.h, can only read and write in SD buffers
+
+// OVERALL SD: [bitmap][inode blocks][data]
+
+// [bitmap]: SDB0 (1 for used, 0 for free (managing the data array and inodeblocks - to see if they have been allocated yet or not))
+// [inode block]: b[0-12] (direct blocks pointing directly to 1-13 SD data blocks)
+//                b[13] (indirect block: ? )
 
 
 // Coppied Structs from GLDN in class
 // pointer struct for all files and directories 
 typedef struct Inode 
 {
-    Inode *next;
     uint32_t size;
     uint16_t b[NUM_DIRECT_INODE_BLOCKS + 1];
 } Inode;
@@ -51,69 +52,58 @@ typedef struct InodeBlock
 } InodeBLock;
 // Coppied Structs from GLDN in class
 
-Inode* root; // root inode that holds the root directory 
-
-void show_file_system(Inode* root)
-{
-    printf("Print the entire filesystem tree stucture like tree command in unix");
-    //for(int )
-}
-// UNDER THE HOOD SETUP //
-
 typedef struct FileInternals 
 {
     char file_name[MAX_FILE_NAME_CHARACTERS];
-    void *first_inode;
+    Inode *inode; // only one inode per file 
 } FileInternals;
 
-// Copied from GLDN in class //
-bool check_structure_alignment(void)
-{
-    printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
-    printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(IndirectBlock));
-    printf("Expecing sizeof(InodeBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(InodeBlock));
-    printf("Expecing sizeof(DirEntry) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(DirEntry));
-    printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(FreeBitmap)); 
 
-    if(sizeof(Inode) != 32 || 
-       sizeof(IndirectBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
-       sizeof(InodeBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
-       sizeof(DirEntry) != SOFTWARE_DISK_BLOCK_SIZE ||
-       sizeof(FreeBitmap) != SOFTWARE_DISK_BLOCK_SIZE)
-    { return false; } else { return true; }
-}
+//bool check_structure_alignment(void)
+//{
+    //printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
+    //printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(IndirectBlock));
+    //printf("Expecing sizeof(InodeBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(InodeBlock));
+    //printf("Expecing sizeof(DirEntry) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(DirEntry));
+    //printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(FreeBitmap)); 
+    //if(sizeof(Inode) != 32 || 
+       //sizeof(IndirectBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
+       //sizeof(InodeBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
+       //sizeof(DirEntry) != SOFTWARE_DISK_BLOCK_SIZE ||
+       //sizeof(FreeBitmap) != SOFTWARE_DISK_BLOCK_SIZE)
+    //{ return false; } else { return true; }
+//}
 
 // set jth bit in a bitmap composed of 8-bit integers 
-void set_bit(unsigned char *bitmap, uint64_t j)
-{ bitmap[j / 8] != (1 << (j % 8)); }
+//void set_bit(unsigned char *bitmap, uint64_t j)
+//{ bitmap[j / 8] != (1 << (j % 8)); }
 
 // clear jth bit in a bitmap composed of 8-bit integers 
-void clear_bit(unsigned char *bitmap, uint64_t j)
-{ bitmap[j / 8] & ~(1 << (j % 8)); }
+//void clear_bit(unsigned char *bitmap, uint64_t j)
+//{ bitmap[j / 8] & ~(1 << (j % 8)); }
 
 // returns true if jth bit is set in a bitmap of 8-bit integers,
 // otherwise false 
-bool is_bit_set(unsigned char *bitmap, uint64_t j)
-{ return bitmap[j / 8] & (1 << (j & 8)); }
-
-static bool mark_block(uint16_t blk, bool flag)
-{
-
-    FreeBitmap f;
-
-    blk -= FIRST_DATA_BLOCK;
-    if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
-    else
-    {
-        if(flag)
-        {
-
-        }
-    }
-}
+//bool is_bit_set(unsigned char *bitmap, uint64_t j)
+//{ return bitmap[j / 8] & (1 << (j & 8)); }
 
 
-// Copied from GLDN in class //
+
+//static bool mark_block(uint16_t blk, bool flag)
+//{
+    //FreeBitmap f;
+    //blk -= FIRST_DATA_BLOCK;
+    //if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
+    //else
+    //{
+        //if(flag)
+        //{
+
+        //}
+    //}
+//}
+
+
 
 // IMPLEMENTING GLDN's .h TEMPLATE //
 
@@ -130,7 +120,7 @@ File open_file(char *name, FileMode mode)
     { // READ_WRITE // 
 
     } // READ_WRITE //
-    else { }
+    else { printf("\nInvalid FileMode selection.\n"); }
 }
 
 // create and open new file with pathname 'name' and (implied) access
@@ -196,7 +186,7 @@ void fs_print_error(void)
         case FS_ILLEGAL_FILENAME: 
         { printf("[ERR] filename begins with a null character"); break; }
         case FS_IO_ERROR: 
-        { printf("[ERR] something really bad happened"); break; }
+        { printf("[ERR] something really bad happened"); break; } 
     } // s //
 } // fs_print_error //
 
@@ -242,4 +232,3 @@ extern FSError fserror;
 // While the head idea is on track for directories, I really need an giant 
 // array just to store all the inodes.  I will have a max amount of inodes,
 // with a certain amount of inode blocks.  The inode blocks will be stored
-[NUM_DIRECT_INODE_BLOCKS + 1];
