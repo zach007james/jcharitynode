@@ -52,38 +52,41 @@ const uint64_t MAX_NUM_INODES;
 // pointer struct for all files and directories 
 typedef struct Inode 
 {
-    uint32_t size; // assuming this is the size of the file data in bytes
+    uint32_t size; // size of the poetry 
     uint16_t b[MAX_NUM_DIRECT_INODE_BLOCKS + 1];
     //FileInternals *file_internals; // bc this isn't possible, need Directory struct
 } Inode;
 
-
 // implemenation needs to be adjusted and create file and find file 
 // need to be updated to use indices and not pointers
-typedef struct Directory
+typedef struct DirEntry
 {
     char file_name[MAX_FILE_NAME_CHARACTERS];
     uint32_t inode_index;
-} Directory;
+} DirEntry;
 
-typedef struct DirectoryBlock
+typedef struct DirBlock
 {
-    Directory entries[MAX_DIR_ENTRIES_PER_BLOCK];
+    DirEntry entries[MAX_DIR_ENTRIES_PER_BLOCK];
     
 } DirectoryBlock;
 
-// blocks to hold the creation of hte files 
+// blocks to hold the creation of the files 
 typedef struct InodeBlock
 {
     Inode inodes[INODES_PER_INODE_BLOCK];
 } InodeBlock;
 // Coppied Structs from GLDN in class
 
+typedef struct IndirectBlock
+{
+    uint64_t more_space[INODES_PER_INODE_BLOCK];
+} IndirectBlock;
+
 typedef struct FileInternals 
 {
     char file_name[MAX_FILE_NAME_CHARACTERS];
     uint32_t inode_index; // only one inode per file 
-    uint32_t file_size; // 
     bool is_open;
 } FileInternals;
 

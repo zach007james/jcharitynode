@@ -23,8 +23,12 @@ int main()
         fserror = FS_IO_ERROR; fs_print_error(); 
         printf("\n[DBG] failed initialization of software disk!!\n");
         return NULL;
-    }
+    } else { printf("\nSoftware disk formatted!\n"); }
     // INIT DISK // 
+
+    // everything below will be done in time or in filesystem.c, so while the 
+    // structure is nice, formatfs.c is complete - asked GLDN in class
+    /*
 
     // SIZE INFO // 
     uint16_t DISK_SIZE = software_disk_size();
@@ -50,16 +54,25 @@ int main()
     // INIT BITMAP // 
 
     // INIT INODE_BLOCKS // 
-
+    uint32_t REQUIRED_INODE_BLOCKS = sizeof(InodeBlock) / SOFTWARE_DISK_BLOCK_SIZE;
+    for(int k = 0; k < REQUIRED_INODE_BLOCKS; k++)
+    {
+        InodeBlock inode_block_init;
+        write_sd_block(&inode_block_init, INODE_BLOCK_SD_START_LOCATION + k);
+    }
     // INIT INODE_BLOCKS // 
 
     // INIT DIRECTORY_BLOCK //
-
+    uint32_t REQUIRED_DIR_BLOCKS = sizeof(DirBlock) / SOFTWARE_DISK_BLOCK_SIZE;
+    for(int l = 0; l < REQUIRED_DIR_BLOCKS; l++)
+    {
+        DirBlock directory_block_init;
+        write_sd_block(&directory_block_init, DIR_BLOCK_SD_START_LOCATION + l);
+    }
     // INIT DIRECTORY_BLOCK // 
 
     // No Need to Init Data Blocks - Init as We Go
-
-
+    */
 
     return 0;
 
