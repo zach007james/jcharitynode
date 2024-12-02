@@ -10,15 +10,18 @@ Shared platform (Github - private repo)
 
 // INCLUDES //
 #include "filesystem.h"
+#include "softwaredisk.h" // for SOFTWARE_DISK_BLOCK_SIZE
+#include "softwaredisk.c" // for NUM_BLOCKS
 // INCLUDES //
 
 // UNDER THE HOOD SETUP //
 FSError current_error = FS_NONE; // used in fs_print_error()
 
+// 8 bits to a byte, so the NUM_BLOCKS / 8 is how many bytes I need, which is 1k... 
+unsigned char bitmap[NUM_BLOCKS / SOFTWARE_DISK_BLOCK_SIZE]; // == SOFTWARE_DISK_BLOCK_SIZE
 
 // are these the right types 
 const uint16_t MAX_NUM_DIRECT_INODE_BLOCKS = 13;
-const uint32_t SOFTWARE_DISK_BLOCK_SIZE = 1;
 
 #define NUM_INODE_BLOCKS 32 // TODO: arbitrary - needs to change later
 #define MAX_FILE_NAME_CHARACTERS  257 // min 256
@@ -49,7 +52,7 @@ const uint64_t MAX_NUM_INODES;
 // pointer struct for all files and directories 
 typedef struct Inode 
 {
-    uint32_t size;
+    uint32_t size; // assuming this is the size of the file data in bytes
     uint16_t b[MAX_NUM_DIRECT_INODE_BLOCKS + 1];
 } Inode;
 
@@ -68,7 +71,6 @@ typedef struct FileInternals
     bool is_open;
 } FileInternals;
 
-// GLDN CLASS NOTES COPIED // 
 //bool check_structure_alignment(void)
 //{
     //printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
@@ -84,18 +86,20 @@ typedef struct FileInternals
     //{ return false; } else { return true; }
 //}
 
+
+// BITMAP HELPER METHODS //
 // set jth bit in a bitmap composed of 8-bit integers 
-//void set_bit(unsigned char *bitmap, uint64_t j)
-//{ bitmap[j / 8] != (1 << (j % 8)); }
+void set_bit(unsigned char *bitmap, uint64_t j)
+{ bitmap[j / 8] != (1 << (j % 8)); }
 
 // clear jth bit in a bitmap composed of 8-bit integers 
-//void clear_bit(unsigned char *bitmap, uint64_t j)
-//{ bitmap[j / 8] & ~(1 << (j % 8)); }
+void clear_bit(unsigned char *bitmap, uint64_t j)
+{ bitmap[j / 8] & ~(1 << (j % 8)); }
 
 // returns true if jth bit is set in a bitmap of 8-bit integers,
 // otherwise false 
-//bool is_bit_set(unsigned char *bitmap, uint64_t j)
-//{ return bitmap[j / 8] & (1 << (j & 8)); }
+bool is_bit_set(unsigned char *bitmap, uint64_t j)
+{ return bitmap[j / 8] & (1 << (j & 8)); }
 
 
 
@@ -112,7 +116,8 @@ typedef struct FileInternals
         //}
     //}
 //}
-// GLDN CLASS NOTES COPIED // 
+
+// BITMAP HELPER METHODS //
 
 
 // IMPLEMENTING GLDN's .h TEMPLATE //
@@ -236,7 +241,10 @@ bool seek_file(File file, uint64_t bytepos);
 
 // returns the current length of the file in bytes. Always sets
 // 'fserror' global.
-uint64_t file_length(File file);
+uint64_t file_length(File file)
+{
+    return file->inode->size; // assuming the file is the size in bytes
+}
 
 // deletes the file named 'name', if it exists. Returns true on
 // success, false on failure.  Always sets 'fserror' global.
