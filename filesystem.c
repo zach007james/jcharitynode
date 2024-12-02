@@ -3,6 +3,7 @@ Assignment 3 Parnership between...
 Zachary R. James (zjames8@lsu.edu | 894278474) and
 Joshua C. Harris (jhar284@lsu.edu | )
 
+Added another change here 
 
 Shared platform (Github - private repo)
 */
