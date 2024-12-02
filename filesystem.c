@@ -1,17 +1,9 @@
 /* 
 Assignment 3 Parnership between...
 Zachary R. James (zjames8@lsu.edu | 894278474) and
-Joshua C. Harris (jahr284@lsu.edu | )
+Joshua C. Harris (jhar284@lsu.edu | )
 
-Contributions (written by Zach): 
-- Zach (setup, overall structure, brute force )
-    - Setup: VS Code, VIM keybindings
-    - fs_print_error()
-    - 
-- Josh (raw intelligence for hard problems )
-    - Setup: VS Code / Emacs
-    - 
-    - 
+
 Shared platform (Github - private repo)
 */
 
