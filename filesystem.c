@@ -96,19 +96,19 @@ bool is_bit_set(unsigned char *bitmap, uint64_t j)
 
 
 
-//static bool mark_block(uint16_t blk, bool flag)
-//{
-    //FreeBitmap f;
+static bool mark_block(uint16_t blk, bool flag)
+{ // mark_block() //
+    FreeBitmap f;
     //blk -= FIRST_DATA_BLOCK;
-    //if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
-    //else
-    //{
-        //if(flag)
-        //{
+    if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
+    else
+    {
+        if(flag) { set_bit(f.bytes, blk); }
+        else { clear_bit(f.bytes, blk); }
+    }
 
-        //}
-    //}
-//}
+    return true;
+} // mark_block() //
 
 // BITMAP HELPER METHODS //
 
@@ -237,11 +237,12 @@ bool delete_file(char *name);
 // determines if a file with 'name' exists and returns true if it
 // exists, otherwise false.  Always sets 'fserror' global.
 bool file_exists(char *name);
-/*{
+{
     // check filename
     if(name == NULL || name[0] == '\0')
     { fserror = FS_ILLEGAL_FILENAME; return false; }
-
+    
+    /*
     // seach through inode blocks
     for(int i = 0; i < NUM_INODE_BLOCKS; i++)
     {
@@ -261,14 +262,17 @@ bool file_exists(char *name);
             { fserror = FS_NONE; fs_print_error(); true; }
         }
     }
+    */
 
-    fserror = FS_FILE_NOT_FOUND; fs_print_error(); return false; 
-}*/
+    fserror = FS_FILE_NOT_FOUND;
+    fs_print_error();
+    return false; 
+}
 
 // describe current filesystem error code by printing a descriptive
 // message (qualifies - exactly as descriptive as the instructions gave )) to standard error.
 void fs_print_error(void) 
-{ // fs_print_error // 
+{ // fs_print_error() // 
     switch(fserror)
     { // s // 
         case FS_NONE:
@@ -292,7 +296,7 @@ void fs_print_error(void)
         case FS_IO_ERROR: 
         { printf("[ERR] something really bad happened"); break; } 
     } // s //
-} // fs_print_error //
+} // fs_print_error() //
 
 // extra function to make sure structure alignment, data structure
 // sizes, etc. on target platform are correct.  Returns true on
