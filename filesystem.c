@@ -68,36 +68,6 @@ FSError fserror = FS_NONE; // used in the fs_print_error()
 // OVERALL SD: [bitmap][inode blocks][Indirect Inode Block(s)][dir blocks[data blocks]
 
 // SD: [bitmap (0)][dir entry (1)][inode blocks (2-33)][indirect ]
-/*
-typedef struct InodeLocation
-{
-    uint16_t inode_block_index;
-    uint16_t inode_index;
-} InodeLocation;
-
-InodeLocation get_inode_location(uint16_t inode_index)
-{ // get_inode_location() //
-    InodeLocation ret_inode_location;
-    if(inode_index < MAX_NUM_INODES)
-    { // i //
-        ret_inode_location.inode_block_index = FIRST_INODE_BLOCK + (inode_index / INODES_PER_INODE_BLOCK);
-        ret_inode_location.inode_index = inode_index % INODES_PER_INODE_BLOCK;
-    } // i //
-    else if(inode_index == MAX_NUM_INODES)
-    { // ei //
-        ret_inode_location.inode_block_index = LAST_INODE_BLOCK;
-        ret_inode_location.inode_index = inode_index % INODES_PER_INODE_BLOCK;
-        printf("\n[DBG] inode_index == MAX_NUM_INODES (just used last inode block)\n");
-    } // ei //
-    else 
-    { // e //
-        printf("\n[DBG] inode_index out of range or other error in get_inode_location()\n");
-        fserror = FS_ILLEGAL_FILENAME;
-        fs_print_error();
-    } // e //
-    return ret_inode_location;
-} // get_inode_location() //
-*/
 
 // pointer struct for all files and directories 
 typedef struct Inode 
