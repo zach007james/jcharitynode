@@ -85,8 +85,6 @@ typedef struct Inode
     uint16_t b[NUM_DIRECT_INODE_BLOCKS + 1];
 } Inode;
 
-// implemenation needs to be adjusted and create file and find file 
-// need to be updated to use indices and not pointers
 typedef struct DirEntry
 {
     bool file_is_open;
@@ -113,9 +111,7 @@ typedef struct IndirectBlock
 
 typedef struct FileInternals 
 {
-    char file_name[MAX_FILENAME_SIZE];
-    uint32_t inode_index; // only one inode per file 
-    bool is_open;
+    uint32_t dir_entry_index;
 } FileInternals;
 
 // BITMAP HELPER METHODS //
@@ -135,19 +131,22 @@ bool is_bit_set(unsigned char *bitmap, uint64_t j)
 { return bitmap[j / 8] & (1 << (j & 8)); }
 
 // marks a SD block as free or used (true = )
-static bool mark_block(uint16_t blk, bool flag)
-{ // mark_block() //
-    FreeBitmap f;
-    blk -= FIRST_DATA_BLOCK; // sets the relative data block number
-    if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
-    else
-    {
-        if(flag) { set_bit(f.bytes, blk); }
-        else { clear_bit(f.bytes, blk); }
-    }
+ // Start of Selection
+ static bool mark_block(uint16_t blk, bool flag)
+ { // mark_block() //
+     FreeBitmap f;
+     blk -= FIRST_DATA_BLOCK; // sets the relative data block number
+     if (!read_sd_block(&f, DATA_BITMAP_BLOCK)) { 
+         return false; 
+     }
 
-    return true;
-} // mark_block() //
+     if (flag) { set_bit(f.bytes, blk); }
+     else { clear_bit(f.bytes, blk); }
+
+     if (!write_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
+     
+     return true;
+ } // mark_block() //
 
 // BITMAP HELPER METHODS //
 
@@ -176,10 +175,117 @@ File open_file(char *name, FileMode mode)
 // NULL on error. Always sets 'fserror' global.
 File create_file(char *name)
 { // create_file() //
-    // threadsafe call here??
 
-    File ret_file; // init file
-    ret_file = malloc(sizeof(struct FileInternals)); // malloc local RAM / program storage for this
+    // Check for illegal filename
+    if(name == NULL || name[0] == '\0')
+    { fserror = FS_ILLEGAL_FILENAME; fs_print_error(); return NULL; }
+
+    // Init file
+    File ret_file = NULL; 
+
+    /*
+    // Locks for thread safety (commented out for now)
+    pthread_mutex_lock(&data_bitmap_mutex);
+    pthread_mutex_lock(&dir_blocks_mutex);
+    pthread_mutex_lock(&inode_bitmap_mutex);
+    //pthread_mutex_lock(&inode_blocks_mutex);
+    */
+
+    uint16_t inode_index = 0;
+    bool found_dir_entry = false;
+
+    // Read bitmap 
+    FreeBitmap free_data_bitmap;
+    if(!read_sd_block(&free_data_bitmap, DATA_BITMAP_BLOCK))
+    {
+        fserror = FS_IO_ERROR; fs_print_error();
+        printf("\n[DBG] Could not read the free data bitmap - check create_file()\n");
+        return NULL;
+    }
+
+    FreeBitmap free_inode_bitmap;
+    if(!read_sd_block(&free_inode_bitmap, INODE_BITMAP_BLOCK))
+    {
+        fserror = FS_IO_ERROR; fs_print_error();
+        printf("\n[DBG] Could not read the free inode bitmap - check create_file()\n");
+        return NULL;
+    }
+
+    // Check if DirEnry / 'File' already exists
+    DirEntry dir_entry_buff;
+    if(file_exists(name)) // searches the DirEntry's to see if the file already exists
+    {
+        fserror = FS_FILE_ALREADY_EXISTS; fs_print_error();
+        printf("\n[DBG] Found a DirEntry with the same name as the file we are trying to create\n");
+        free(ret_file);
+        return NULL;
+    }
+
+    // Find free DirEntry index
+    uint16_t free_dir_entry_index = 0;
+    for(free_dir_entry_index = FIRST_DIR_ENTRY_BLOCK; free_dir_entry_index < LAST_DIR_ENTRY_BLOCK; free_dir_entry_index++)
+    {
+        if(!is_bit_set(free_data_bitmap.bytes, free_dir_entry_index)) { break; }
+    }
+    // Check last entry 
+    if(free_dir_entry_index == LAST_DIR_ENTRY_BLOCK)
+    {
+        if(is_bit_set(free_data_bitmap.bytes, free_dir_entry_index))
+        {
+            fserror = FS_OUT_OF_SPACE; fs_print_error();
+            printf("\n[DBG] No free directory entries found - check create_file()\n");
+            free(ret_file);
+            return NULL;
+        }
+        else if(!is_bit_set(free_data_bitmap.bytes, free_dir_entry_index))
+        { free_dir_entry_index = LAST_DIR_ENTRY_BLOCK; }
+        else { fserror = FS_IO_ERROR; fs_print_error(); return NULL; } // no idea what happened case 
+    }
+
+    // Find free Inode
+    uint16_t free_inode_index = 0;
+    for(free_inode_index = FIRST_INODE_BLOCK; free_inode_index < LAST_INODE_BLOCK; free_inode_index++)
+    {
+        if(!is_bit_set(free_inode_bitmap.bytes, free_inode_index)) { break; }
+    }
+    // Check last inode entry 
+    if(free_inode_index == LAST_INODE_BLOCK)
+    {
+        if(is_bit_set(free_data_bitmap.bytes, free_inode_index))
+        {
+            fserror = FS_OUT_OF_SPACE; fs_print_error();
+            printf("\n[DBG] No free inodes found - check create_file()\n");
+            free(ret_file);
+            return NULL;
+        } 
+        else if(!is_bit_set(free_data_bitmap.bytes, free_inode_index))
+        { free_inode_index = LAST_INODE_BLOCK; }
+        else { fserror = FS_IO_ERROR; fs_print_error(); return NULL; } // no idea what happened case 
+    }
+
+    // Fill DirEntry Buffer 
+    strncpy(dir_entry_buff.file_name, name, MAX_FILENAME_SIZE);
+    dir_entry_buff.inode_index = free_inode_index;
+    dir_entry_buff.file_is_open = false;
+
+    // Write DirEntry and Inodes
+
+    // Write bitmaps 
+
+
+    // DirEntry
+
+    /*
+    // Unlocks for thread safety (commented out for now)
+    pthread_mutex_unlock(&data_bitmap_mutex);
+    pthread_mutex_unlock(&dir_blocks_mutex);
+    pthread_mutex_unlock(&inode_bitmap_mutex);
+    pthread_mutex_unlock(&inode_blocks_mutex);
+    */
+
+    // Inode
+
+    // Data (none)
     return ret_file;
 } // create_file() //
 
