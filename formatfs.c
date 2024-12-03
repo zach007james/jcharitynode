@@ -25,6 +25,18 @@ int main()
     } else { printf("\nSoftware disk formatted!\n"); }
     // INIT DISK // 
 
+    // INIT MUTEXES // 
+
+    bool good_mutexes = init_mutexes();
+    if(!good_mutexes)
+    {
+        fserror = FS_IO_ERROR; fs_print_error();
+        printf("\n[DBG] failed initialization of mutexes!!\n");
+        return 1;
+    } else { printf("\nMutexes initialized!\n"); }
+    // INIT MUTEXES // 
+
+    // CHECK STRUCTURE ALIGNMENT // 
     bool is_aligned = check_structure_alignment();
 
     if(!is_aligned)
