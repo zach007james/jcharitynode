@@ -18,26 +18,55 @@ FSError fserror = FS_NONE; // used in the fs_print_error()
 #define DATA_BITMAP_BLOCK 0 // FreeBitmap
 #define INODE_BITMAP_BLOCK 1 // FreeBitmap
 #define FIRST_INODE_BLOCK 2  // InodeBlock
-#define LAST_INODE_BLOCK 55 // InodeBlock (32 inodes per block, max 54*32 = 1728 inodes)
+#define LAST_INODE_BLOCK 55 // InodeBlock 
+#define MAX_NUM_INODES 1728 // 54 blocks * 32 inodes per block
 #define FIRST_DIR_ENTRY_BLOCK 56 // DirEntry
 #define LAST_DIR_ENTRY_BLOCK 905 // DirEntry
 #define FIRST_DATA_BLOCK 906 // DataBlock
 #define LAST_DATA_BLOCK 8192 // DataBlock
 #define MAX_FILENAME_SIZE 1020 // to make DirEntry struct be 1024 bytes
 #define NUM_DIRECT_INODE_BLOCKS 13 // given in PDF
-#define NUM_SINGLE_INDIRECT_INODE_BLOCKS (SOFTWARE_DISK_BLOCK_SIZE / sizeof(uint16_t) // 128
+#define NUM_SINGLE_INDIRECT_INODE_BLOCKS (SOFTWARE_DISK_BLOCK_SIZE / sizeof(uint16_t)) // 128
 // GLDN DEFINED BLOCKS //
 
 #define MAX_FILES 800
 #define INODES_PER_INODE_BLOCK (SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode))
 #define MAX_DIR_ENTRIES_PER_BLOCK (SOFTWARE_DISK_BLOCK_SIZE / sizeof(DirEntry))
-const uint64_t MAX_NUM_INODES; 
 #define BITMAP_SD_LOCATION 0
 #define INODE_BLOCK_SD_START_LOCATION 1
 
 // OVERALL SD: [bitmap][inode blocks][Indirect Inode Block(s)][dir blocks[data blocks]
 
 // SD: [bitmap (0)][dir entry (1)][inode blocks (2-33)][indirect ]
+
+typedef struct InodeLocation
+{
+    uint16_t inode_block_index;
+    uint16_t inode_index;
+} InodeLocation;
+
+InodeLocation get_inode_location(uint16_t inode_index)
+{ // get_inode_location() //
+    InodeLocation ret_inode_location;
+    if(inode_index < MAX_NUM_INODES)
+    { // i //
+        ret_inode_location.inode_block_index = FIRST_INODE_BLOCK + (inode_index / INODES_PER_INODE_BLOCK);
+        ret_inode_location.inode_index = inode_index % INODES_PER_INODE_BLOCK;
+    } // i //
+    else if(inode_index == MAX_NUM_INODES)
+    { // ei //
+        ret_inode_location.inode_block_index = LAST_INODE_BLOCK;
+        ret_inode_location.inode_index = inode_index % INODES_PER_INODE_BLOCK;
+        printf("\n[DBG] inode_index == MAX_NUM_INODES (just used last inode block)\n");
+    } // ei //
+    else 
+    { // e //
+        printf("\n[DBG] inode_index out of range or other error in get_inode_location()\n");
+        fserror = FS_ILLEGAL_FILENAME;
+        fs_print_error();
+    } // e //
+    return ret_inode_location;
+} // get_inode_location() //
 
 // pointer struct for all files and directories 
 typedef struct Inode 
@@ -94,8 +123,6 @@ void clear_bit(unsigned char *bitmap, uint64_t j)
 bool is_bit_set(unsigned char *bitmap, uint64_t j)
 { return bitmap[j / 8] & (1 << (j & 8)); }
 
-
-
 static bool mark_block(uint16_t blk, bool flag)
 { // mark_block() //
     FreeBitmap f;
@@ -119,7 +146,7 @@ static bool mark_block(uint16_t blk, bool flag)
 // Current file position is set to byte 0.  Returns NULL on
 // error. Always sets 'fserror' global.
 File open_file(char *name, FileMode mode)
-{
+{ // open_file() //
     if(mode == READ_ONLY)
     { // READ_ONLY //
 
@@ -129,80 +156,20 @@ File open_file(char *name, FileMode mode)
 
     } // READ_WRITE //
     else { printf("\nInvalid FileMode selection.\n"); }
-}
+    return NULL; // I don't think I am allowed to do this 
+} // open_file() //
 
 // create and open new file with pathname 'name' and (implied) access
 // mode READ_WRITE.  Current file position is set to byte 0.  Returns
 // NULL on error. Always sets 'fserror' global.
 File create_file(char *name)
-{
-    /*
+{ // create_file() //
     // threadsafe call here??
 
     File ret_file; // init file
     ret_file = malloc(sizeof(struct FileInternals)); // malloc local RAM / program storage for this
-    if(!ret_file) { printf("[DBG] malloc failed"); return NULL; }
-
-    ret_file->file_size = 0; // init size to 0
-    
-    strncpy(ret_file->file_name, name, sizeof(ret_file->file_name) - 1); // setting the file name
-    ret_file->file_name[sizeof(ret_file->file_name) - 1] = '\0'; // null termination
-
-    // search bitmap of inode locations / or research manually through to find next available inode in inode block
-    // TODO: do I need an inode block bitmap for each inode block
-
-    Inode* free_inode = NULL;
-    int inode_block_index_buff = -1;
-
-    // need a num of inode blocks method
-
-    for(int i = 0; i < NUM_INODE_BLOCKS; i++)
-    {
-        InodeBlock inode_block_buff;
-
-        // reads in the content to the block buffer and tests 
-        if(!(read_sd_block(&inode_block_buff, i + INODE_BLOCK_SD_START_LOCATION)))
-        {
-            printf("\n[DBG] could read in inode block to read it for looking for open inodes for the new file.\n");
-        }
-
-        // search the InodeBlock for an open Inode for the file to have
-        for(int j = 0; j < (SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)); j++)
-        {
-            // needs refining, but the idea is to see if the inode here fixes itself
-            if((inode_block_buff.inodes[j].size == 0) && (inode_block_buff.inodes[j].b[0] != NULL))
-            {
-                free_inode = &inode_block_buff.inodes[j];
-                inode_block_index_buff = i;
-                break;
-            }
-
-            if(free_inode)
-            {
-                free_inode->size = 0;
-                // clear the block pointers... ???
-                memset(free_inode->b, 0, sizeof(free_inode->b));
-// filesystem error code set (set by each filesystem function)
-extern FSError fserror; 
-    }
-
-    // if no inode found / search failed
-    if(!free_inode)
-    {
-        fserror = FS_OUT_OF_SPACE; fs_print_error();
-        free(ret_file); printf("\n[DBG] no more inodes left\n"); 
-        return NULL;
-    }
-    
-
-    // finally set the ret file to the new inode
-    ret_file->inode = free_inode;
-    ret_file->is_open = false; // should this be true??
-
     return ret_file;
-    // threadsafe call here??
-    */
-}
+} // create_file() //
 
 
 // close 'file'.  Always sets 'fserror' global.
@@ -236,8 +203,8 @@ bool delete_file(char *name);
 
 // determines if a file with 'name' exists and returns true if it
 // exists, otherwise false.  Always sets 'fserror' global.
-bool file_exists(char *name);
-{
+bool file_exists(char *name)
+{ // file_exists() //
     // check filename
     if(name == NULL || name[0] == '\0')
     { fserror = FS_ILLEGAL_FILENAME; return false; }
