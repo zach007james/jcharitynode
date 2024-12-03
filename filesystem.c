@@ -1,75 +1,65 @@
 /* 
 Assignment 3 Parnership between...
-Zachary R. James (zjames8@lsu.edu | 894278474) and
-Joshua C. Harris (jhar284@lsu.edu | )
-
-Added another change here 
-
-Shared platform (Github - private repo)
+Zachary R. James (zjames8@lsu.edu) and
+Joshua C. Harris (jhar284@lsu.edu)
 */
 
 // INCLUDES //
 #include "filesystem.h"
 #include "softwaredisk.h" // for SOFTWARE_DISK_BLOCK_SIZE
-#include "softwaredisk.c" // for NUM_BLOCKS
-// INCLUDES //
+// INCLUDES // 
+
+// filesystem error code set (set by each filesystem function)
+FSError fserror = FS_NONE; // used in the fs_print_error()
 
 // UNDER THE HOOD SETUP //
-FSError fserror = FS_NONE; // used in fs_print_error()
-
-// 8 bits to a byte, so the NUM_BLOCKS / 8 is how many bytes I need, which is 1k... 
-unsigned char bitmap[NUM_BLOCKS / SOFTWARE_DISK_BLOCK_SIZE]; // == SOFTWARE_DISK_BLOCK_SIZE
-
 // are these the right types 
-const uint16_t MAX_NUM_DIRECT_INODE_BLOCKS = 13;
-#define NUM_INODE_BLOCKS 32 // TODO: arbitrary - needs to change later
-#define MAX_FILE_NAME_CHARACTERS  257 // min 256
+// GLDN DEFINED BLOCKS //
+#define DATA_BITMAP_BLOCK 0 // FreeBitmap
+#define INODE_BITMAP_BLOCK 1 // FreeBitmap
+#define FIRST_INODE_BLOCK 2  // InodeBlock
+#define LAST_INODE_BLOCK 55 // InodeBlock (32 inodes per block, max 54*32 = 1728 inodes)
+#define FIRST_DIR_ENTRY_BLOCK 56 // DirEntry
+#define LAST_DIR_ENTRY_BLOCK 905 // DirEntry
+#define FIRST_DATA_BLOCK 906 // DataBlock
+#define LAST_DATA_BLOCK 8192 // DataBlock
+#define MAX_FILENAME_SIZE 1020 // to make DirEntry struct be 1024 bytes
+#define NUM_DIRECT_INODE_BLOCKS 13 // given in PDF
+#define NUM_SINGLE_INDIRECT_INODE_BLOCKS (SOFTWARE_DISK_BLOCK_SIZE / sizeof(uint16_t) // 128
+// GLDN DEFINED BLOCKS //
+
 #define MAX_FILES 800
-#define INODES_PER_INODE_BLOCK SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode)
-#define MAX_DIR_ENTRIES_PER_BLOCK MAX_FILES // need more math here
-
+#define INODES_PER_INODE_BLOCK (SOFTWARE_DISK_BLOCK_SIZE / sizeof(Inode))
+#define MAX_DIR_ENTRIES_PER_BLOCK (SOFTWARE_DISK_BLOCK_SIZE / sizeof(DirEntry))
 const uint64_t MAX_NUM_INODES; 
-
-
-// HIGH-LEVEL EXPLANATION
-// software disk block (SDB): 1k bytes
-// software disk (SD): [SDB 0][SDB 1]...[SDB 8k]
-// using softwaredisk.h, can only read and write in SD buffers
-
-// OVERALL SD: [bitmap][inode blocks][data]
-
-// [bitmap]: SDB0 (1 for used, 0 for free (managing the data array and inodeblocks - to see if they have been allocated yet or not))
-// [inode block]: b[0-12] (direct inode blocks pointing directly to 1-13 SD data blocks)
-//                b[13] (indirect block: ? )
 #define BITMAP_SD_LOCATION 0
 #define INODE_BLOCK_SD_START_LOCATION 1
-//  inode: one per file 
 
-// FineInternals : 
+// OVERALL SD: [bitmap][inode blocks][Indirect Inode Block(s)][dir blocks[data blocks]
 
+// SD: [bitmap (0)][dir entry (1)][inode blocks (2-33)][indirect ]
 
-// Coppied Structs from GLDN in class
 // pointer struct for all files and directories 
 typedef struct Inode 
 {
     uint32_t size; // size of the poetry 
-    uint16_t b[MAX_NUM_DIRECT_INODE_BLOCKS + 1];
-    //FileInternals *file_internals; // bc this isn't possible, need Directory struct
+    uint16_t b[NUM_DIRECT_INODE_BLOCKS + 1];
 } Inode;
 
 // implemenation needs to be adjusted and create file and find file 
 // need to be updated to use indices and not pointers
 typedef struct DirEntry
 {
-    char file_name[MAX_FILE_NAME_CHARACTERS];
-    uint32_t inode_index;
+    bool file_is_open;
+    uint16_t inode_index;
+    char file_name[MAX_FILENAME_SIZE];
 } DirEntry;
 
-typedef struct DirBlock
+
+typedef struct FreeBitmap
 {
-    DirEntry entries[MAX_DIR_ENTRIES_PER_BLOCK];
-    
-} DirectoryBlock;
+    uint8_t bytes[SOFTWARE_DISK_BLOCK_SIZE]; // works out bc we have 8 * 1k total SD blocks but each byte has 8 bits so it works out 
+} FreeBitmap;
 
 // blocks to hold the creation of the files 
 typedef struct InodeBlock
@@ -80,31 +70,15 @@ typedef struct InodeBlock
 
 typedef struct IndirectBlock
 {
-    uint64_t more_space[INODES_PER_INODE_BLOCK];
+    uint16_t idx_to_more_space[NUM_SINGLE_INDIRECT_INODE_BLOCKS];
 } IndirectBlock;
 
 typedef struct FileInternals 
 {
-    char file_name[MAX_FILE_NAME_CHARACTERS];
+    char file_name[MAX_FILENAME_SIZE];
     uint32_t inode_index; // only one inode per file 
     bool is_open;
 } FileInternals;
-
-//bool check_structure_alignment(void)
-//{
-    //printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
-    //printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(IndirectBlock));
-    //printf("Expecing sizeof(InodeBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(InodeBlock));
-    //printf("Expecing sizeof(DirEntry) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(DirEntry));
-    //printf("Expecing sizeof(IndirectBlock) = %d, acutal = &lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(FreeBitmap)); 
-    //if(sizeof(Inode) != 32 || 
-       //sizeof(IndirectBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
-       //sizeof(InodeBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
-       //sizeof(DirEntry) != SOFTWARE_DISK_BLOCK_SIZE ||
-       //sizeof(FreeBitmap) != SOFTWARE_DISK_BLOCK_SIZE)
-    //{ return false; } else { return true; }
-//}
-
 
 // BITMAP HELPER METHODS //
 // set jth bit in a bitmap composed of 8-bit integers 
@@ -162,6 +136,7 @@ File open_file(char *name, FileMode mode)
 // NULL on error. Always sets 'fserror' global.
 File create_file(char *name)
 {
+    /*
     // threadsafe call here??
 
     File ret_file; // init file
@@ -207,17 +182,8 @@ File create_file(char *name)
                 free_inode->size = 0;
                 // clear the block pointers... ???
                 memset(free_inode->b, 0, sizeof(free_inode->b));
-
-                // update the disk 
-                if(!write_sd_block(&inode_block_buff, inode_block_index_buff + INODE_BLOCK_SD_START_LOCATION))
-                {
-                    printf("[DBG] error writing block to disk");
-                    free(ret_file);
-                    return NULL;
-                }
-                break;
-            }
-        }        
+// filesystem error code set (set by each filesystem function)
+extern FSError fserror; 
     }
 
     // if no inode found / search failed
@@ -235,7 +201,9 @@ File create_file(char *name)
 
     return ret_file;
     // threadsafe call here??
+    */
 }
+
 
 // close 'file'.  Always sets 'fserror' global.
 void close_file(File file);
@@ -260,10 +228,7 @@ bool seek_file(File file, uint64_t bytepos);
 
 // returns the current length of the file in bytes. Always sets
 // 'fserror' global.
-uint64_t file_length(File file)
-{
-    return file->inode->size; // assuming the file is the size in bytes
-}
+uint64_t file_length(File file); // saw the dir entry for the other things 
 
 // deletes the file named 'name', if it exists. Returns true on
 // success, false on failure.  Always sets 'fserror' global.
@@ -271,8 +236,8 @@ bool delete_file(char *name);
 
 // determines if a file with 'name' exists and returns true if it
 // exists, otherwise false.  Always sets 'fserror' global.
-bool file_exists(char *name)
-{
+bool file_exists(char *name);
+/*{
     // check filename
     if(name == NULL || name[0] == '\0')
     { fserror = FS_ILLEGAL_FILENAME; return false; }
@@ -298,7 +263,7 @@ bool file_exists(char *name)
     }
 
     fserror = FS_FILE_NOT_FOUND; fs_print_error(); return false; 
-}
+}*/
 
 // describe current filesystem error code by printing a descriptive
 // message (qualifies - exactly as descriptive as the instructions gave )) to standard error.
@@ -332,8 +297,17 @@ void fs_print_error(void)
 // extra function to make sure structure alignment, data structure
 // sizes, etc. on target platform are correct.  Returns true on
 // success, false on failure.
-bool check_structure_alignment(void);
-
-// filesystem error code set (set by each filesystem function)
-extern FSError fserror;
-// IMPLEMENTING GLDN's .h TEMPLATE // 
+bool check_structure_alignment(void)
+{ // check_structure_alignment() // 
+    printf("Expecting sizeof(inode) = 32, actual = %lu\n", sizeof(Inode));
+    printf("Expecing sizeof(IndirectBlock) = %d, acutal = %lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(IndirectBlock));
+    printf("Expecing sizeof(InodeBlock) = %d, acutal = %lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(InodeBlock));
+    printf("Expecing sizeof(DirEntry) = %d, acutal = %lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(DirEntry));
+    printf("Expecing sizeof(FreeBitmap) = %d, acutal = %lu\n", SOFTWARE_DISK_BLOCK_SIZE, sizeof(FreeBitmap)); 
+    if(sizeof(Inode) != 32 || 
+       sizeof(IndirectBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
+       sizeof(InodeBlock) != SOFTWARE_DISK_BLOCK_SIZE ||
+       sizeof(DirEntry) != SOFTWARE_DISK_BLOCK_SIZE ||
+       sizeof(FreeBitmap) != SOFTWARE_DISK_BLOCK_SIZE)
+    { return false; } else { return true; }
+} // check_structure_alignment() //

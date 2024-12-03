@@ -6,10 +6,9 @@ filesystem before anything else happens
 // INCLUDES //
 #include "filesystem.h"
 // comment out below, just for current errors here right now
-#include "filesystem.c"
 #include "softwaredisk.h"
-#include <stdint.h> // for uint types
-#include <math.h> // for the ceil()
+//#include <stdint.h> // for uint types
+//#include <math.h> // for the ceil()
 // INCLUDES //
 
 int main()
@@ -22,9 +21,18 @@ int main()
     {
         fserror = FS_IO_ERROR; fs_print_error(); 
         printf("\n[DBG] failed initialization of software disk!!\n");
-        return NULL;
+        return 1;
     } else { printf("\nSoftware disk formatted!\n"); }
     // INIT DISK // 
+
+    bool is_aligned = check_structure_alignment();
+
+    if(!is_aligned)
+    {
+        printf("\nStructure alignment check failed!\n");
+        return 1;
+    } else { printf("\nStructure alignment check passed!\n"); }
+
 
     // everything below will be done in time or in filesystem.c, so while the 
     // structure is nice, formatfs.c is complete - asked GLDN in class
