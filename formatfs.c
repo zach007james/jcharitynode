@@ -44,6 +44,17 @@ int main()
         printf("\nStructure alignment check failed!\n");
         return 1;
     } else { printf("\nStructure alignment check passed!\n"); }
+    // First file test 
+    printf("\nTesting the create_file() function before I go to bed..\n");
+    File test_file = create_file("test_file.txt");
+    if(test_file) { printf("\nFile created successfully!\n"); }
+    else { printf("\nFile creation failed!\n"); }
+    // Second file test
+    printf("\nTesting the create_file() function again..\n");
+    File test_file2 = create_file("test_file2.txt");
+    if(test_file2) { printf("\nFile created successfully!\n"); }
+    else { printf("\nFile creation failed!\n"); }
+
 
 
     // everything below will be done in time or in filesystem.c, so while the 

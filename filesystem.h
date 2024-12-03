@@ -21,6 +21,11 @@ struct FileInternals;
 // file type used by user code
 typedef struct FileInternals* File; 
 
+// ONLY ADDITIONS TO filesystem.h //
+bool init_mutexes(void);
+bool destroy_mutexes(void);
+// ONLY ADDITIONS TO filesystem.h //
+
 // access mode for open_file() 
 typedef enum {
   READ_ONLY, READ_WRITE

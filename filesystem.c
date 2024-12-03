@@ -191,6 +191,8 @@ File open_file(char *name, FileMode mode)
     return NULL; // I don't think I am allowed to do this 
 } // open_file() //
 
+
+// TODO: JOSH!! (or ME!!) check if, when there is space in a already-existing inode block, that the inode index is not overwritten for a new file
 // create and open new file with pathname 'name' and (implied) access
 // mode READ_WRITE.  Current file position is set to byte 0.  Returns
 // NULL on error. Always sets 'fserror' global.
@@ -212,7 +214,6 @@ File create_file(char *name)
 
     // Locks for thread safety (commented out for now)
     pthread_mutex_lock(&data_bitmap_mutex);
-    pthread_mutex_lock(&dir_blocks_mutex);
     pthread_mutex_lock(&inode_bitmap_mutex);
     pthread_mutex_lock(&inode_blocks_mutex);
 
@@ -416,6 +417,7 @@ uint64_t file_length(File file); // saw the dir entry for the other things
 // success, false on failure.  Always sets 'fserror' global.
 bool delete_file(char *name); 
 
+// TODO: JOSH!! (or ME) NEEDS IMPLEMENTED
 // determines if a file with 'name' exists and returns true if it
 // exists, otherwise false.  Always sets 'fserror' global.
 bool file_exists(char *name)
@@ -423,31 +425,26 @@ bool file_exists(char *name)
     // check filename
     if(name == NULL || name[0] == '\0')
     { fserror = FS_ILLEGAL_FILENAME; return false; }
-    
+
+
+    DirEntry fe_dir_entry_buff;
+
+    // NOTE for JOSH: you can either manually read all and check via DIR_ENTRY_BLOCK range indices
+    //                or read the bitmap to get the indices for them.  Probably better to do the 
+    //                latter for 'correctness', but up to you.
+    // Read through dir bitmap to find the used dir entry slots
     /*
-    // seach through inode blocks
-    for(int i = 0; i < NUM_INODE_BLOCKS; i++)
+    for(int i = FIRST_DIR_ENTRY_BLOCK; i < LAST_DIR_ENTRY_BLOCK; i++)
     {
-        InodeBlock inode_block_buff;
-
-        // read in while tesing 
-        if(!(read_sd_block(&inode_block_buff, i + INODE_BLOCK_SD_START_LOCATION)))
+        if(is_bit_set(free_data_bitmap.bytes, i))
         {
-            fserror = FS_IO_ERROR;
-            printf("\n[DBG] Could not read a block while searching\n");
-            return false;
-        } 
-
-        for(int j = 0; j < INODES_PER_INODE_BLOCK; j++)
-        {
-            if(strcmp(inode_block_buff.inodes[j].file_internals->file_name, name) == 0)
-            { fserror = FS_NONE; fs_print_error(); true; }
+            if(!read_sd_block(&fe_dir_entry_buff, i))
+            { fserror = FS_IO_ERROR; fs_print_error(); return false; }
         }
     }
-    */
-
     fserror = FS_FILE_NOT_FOUND;
     fs_print_error();
+    */
     return false; 
 }
 
