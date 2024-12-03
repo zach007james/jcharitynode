@@ -5,9 +5,18 @@ Joshua C. Harris (jhar284@lsu.edu)
 */
 
 // INCLUDES //
+#include <pthread.h> // for thread safety
 #include "filesystem.h"
 #include "softwaredisk.h" // for SOFTWARE_DISK_BLOCK_SIZE
 // INCLUDES // 
+
+// MUTEX FOR SHARED RESOURCES //
+pthread_mutex_t data_bitmap_mutex;
+pthread_mutex_t inode_bitmap_mutex;
+pthread_mutex_t inode_blocks_mutex;
+pthread_mutex_t indirect_inode_blocks_mutex;
+pthread_mutex_t dir_blocks_mutex;
+// MUTEX FOR SHARED RESOURCES //
 
 // filesystem error code set (set by each filesystem function)
 FSError fserror = FS_NONE; // used in the fs_print_error()
@@ -38,7 +47,7 @@ FSError fserror = FS_NONE; // used in the fs_print_error()
 // OVERALL SD: [bitmap][inode blocks][Indirect Inode Block(s)][dir blocks[data blocks]
 
 // SD: [bitmap (0)][dir entry (1)][inode blocks (2-33)][indirect ]
-
+/*
 typedef struct InodeLocation
 {
     uint16_t inode_block_index;
@@ -67,6 +76,7 @@ InodeLocation get_inode_location(uint16_t inode_index)
     } // e //
     return ret_inode_location;
 } // get_inode_location() //
+*/
 
 // pointer struct for all files and directories 
 typedef struct Inode 
@@ -84,8 +94,7 @@ typedef struct DirEntry
     char file_name[MAX_FILENAME_SIZE];
 } DirEntry;
 
-
-typedef struct FreeBitmap
+typedef struct FreeBitmap // 1024 bytes in size 
 {
     uint8_t bytes[SOFTWARE_DISK_BLOCK_SIZE]; // works out bc we have 8 * 1k total SD blocks but each byte has 8 bits so it works out 
 } FreeBitmap;
@@ -110,23 +119,26 @@ typedef struct FileInternals
 } FileInternals;
 
 // BITMAP HELPER METHODS //
+// TODO: need to re-learn the internals of these later
+
 // set jth bit in a bitmap composed of 8-bit integers 
 void set_bit(unsigned char *bitmap, uint64_t j)
-{ bitmap[j / 8] != (1 << (j % 8)); }
+{ bitmap[j / 8] |= (1 << (j % 8)); } 
 
 // clear jth bit in a bitmap composed of 8-bit integers 
 void clear_bit(unsigned char *bitmap, uint64_t j)
-{ bitmap[j / 8] & ~(1 << (j % 8)); }
+{ bitmap[j / 8] &= ~(1 << (j % 8)); }
 
 // returns true if jth bit is set in a bitmap of 8-bit integers,
 // otherwise false 
 bool is_bit_set(unsigned char *bitmap, uint64_t j)
 { return bitmap[j / 8] & (1 << (j & 8)); }
 
+// marks a SD block as free or used (true = )
 static bool mark_block(uint16_t blk, bool flag)
 { // mark_block() //
     FreeBitmap f;
-    //blk -= FIRST_DATA_BLOCK;
+    blk -= FIRST_DATA_BLOCK; // sets the relative data block number
     if(! read_sd_block(&f, DATA_BITMAP_BLOCK)) { return false; }
     else
     {
